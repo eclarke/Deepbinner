@@ -330,13 +330,13 @@ def find_model(model_name):
     try:
         start_model = pathlib.Path(__file__).parents[1] / 'models' / model_name
         if start_model.is_file():
-            return start_model
+            return str(start_model)
     except IndexError:
         pass
     try:
         start_model = pathlib.Path(__file__).parents[0] / 'models' / model_name
         if start_model.is_file():
-            return start_model
+            return str(start_model)
     except IndexError:
         pass
     sys.exit('Error: could not find {} - did Deepbinner install correctly?'.format(model_name))
