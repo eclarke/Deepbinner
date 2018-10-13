@@ -187,6 +187,8 @@ def realtime_subparser(subparsers):
     classify_and_realtime_options(group)
 
     other_args = group.add_argument_group('Other')
+    other_args.add_argument('--no_wait', action='store_false', dest='wait',
+                            help="End when no more fast5s are detected") 
     other_args.add_argument('-h', '--help', action='help', default=argparse.SUPPRESS,
                             help='Show this help message and exit')
 

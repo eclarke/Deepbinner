@@ -44,13 +44,16 @@ def realtime(args):
                 classify_and_move(fast5s, args, start_model, start_input_size, end_model,
                                   end_input_size, output_size, ignore_files)
                 waiting = False
-            else:
+            elif args.wait:
                 if waiting:
                     print('.', end='', flush=True)
                 else:
                     print('\nWaiting for new fast5 files (Ctrl-C to stop)', end='',
                           flush=True)
                     waiting = True
+            else:
+                print("\n No more fast5s, stopping Deepbinner\n")
+                return()
             time.sleep(5)
     except KeyboardInterrupt:
         print('\n\nStopping Deepbinner real-time binning\n')
