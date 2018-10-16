@@ -33,6 +33,7 @@ def realtime(args):
                               out_dest=sys.stdout)
 
     make_output_dir(args.out_dir)
+    process_fn = classify_and_copy if args.no_batch else classify_and_move
     try:
         waiting = False
         ignore_files = set()
@@ -41,19 +42,22 @@ def realtime(args):
             fast5s = [x for x in fast5s if x not in ignore_files]
             if fast5s:
                 time.sleep(5)  # wait a bit to make sure any file moves are finished
-                classify_and_move(fast5s, args, start_model, start_input_size, end_model,
-                                  end_input_size, output_size, ignore_files)
+                process_fn(fast5s, args, start_model, start_input_size, end_model,
+                           end_input_size, output_size, ignore_files)
                 waiting = False
-            elif args.wait:
+                if args.no_batch:
+                    print("\n Processed all fast5s, stopping Deepbinner\n")
+                    return()
+            elif args.no_batch:
+                print("\n No fast5 files found, stopping Deepbinner\n")
+                return()
+            else:
                 if waiting:
                     print('.', end='', flush=True)
                 else:
                     print('\nWaiting for new fast5 files (Ctrl-C to stop)', end='',
                           flush=True)
                     waiting = True
-            else:
-                print("\n No more fast5s, stopping Deepbinner\n")
-                return()
             time.sleep(5)
     except KeyboardInterrupt:
         print('\n\nStopping Deepbinner real-time binning\n')
@@ -83,6 +87,17 @@ def classify_and_move(fast5s, args, start_model, start_input_size, end_model, en
     move_classified_fast5s(classifications, read_id_to_fast5_file, args, fast5s, ignore_files)
     print_summary_table(classifications, output=sys.stdout)
 
+def classify_and_copy(fast5s, args, start_model, start_input_size, end_model, end_input_size,
+                      output_size, ignore_files):
+    print()
+    print('Found {:,} fast5 files in {}'.format(len(fast5s), args.in_dir))
+
+    classifications, read_id_to_fast5_file = \
+        classify_fast5_files(fast5s, start_model, start_input_size, end_model, end_input_size,
+                             output_size, args, full_output=False)
+    print()
+    move_classified_fast5s(classifications, read_id_to_fast5_file, args, fast5s, ignore_files)
+    print_summary_table(classifications, output=sys.stdout)
 
 def move_classified_fast5s(classifications, read_id_to_fast5_file, args, fast5s, ignore_files):
     move_count, fail_move_already_exists, fail_move_other_reason = 0, 0, 0
@@ -117,6 +132,40 @@ def move_classified_fast5s(classifications, read_id_to_fast5_file, args, fast5s,
     # If we couldn't move any files, then something is wrong and we should quit.
     if fail_move_other_reason == len(fast5s):
         sys.exit('Error: no files were successfully moved to {}'.format(args.out_dir))
+
+def copy_classified_fast5s(classifications, read_id_to_fast5_file, args, fast5s, ignore_files):
+    copy_count, fail_copy_already_exists, fail_copy_other_reason = 0, 0, 0
+    counts = collections.defaultdict(int)
+    for read_id, barcode_call in classifications.items():
+        fast5_file = read_id_to_fast5_file[read_id]
+
+        out_dir = pathlib.Path(args.out_dir) / get_directory_name(barcode_call)
+        if not out_dir.is_dir():
+            try:
+                os.makedirs(str(out_dir))
+            except (FileNotFoundError, OSError, PermissionError):
+                sys.exit('Error: unable to create output directory {}'.format(out_dir))
+
+        dest_filepath = out_dir / pathlib.Path(fast5_file).name
+        if dest_filepath.is_file():
+            fail_copy_already_exists += 1
+            ignore_files.add(fast5_file)
+        else:
+            try:
+                shutil.copy(fast5_file, str(out_dir))
+                move_count += 1
+            except (FileNotFoundError, OSError, PermissionError):
+                fail_copy_other_reason += 1
+
+        counts[barcode_call] += 1
+        print_moving_progress(move_count, len(fast5s))
+
+    print()
+    print_moving_error_messages(fail_copy_already_exists, fail_copy_other_reason, args.out_dir)
+
+    # If we couldn't move any files, then something is wrong and we should quit.
+    if fail_copy_other_reason == len(fast5s):
+        sys.exit('Error: no files were successfully copied to {}'.format(args.out_dir))
 
 
 def get_directory_name(barcode_call):
